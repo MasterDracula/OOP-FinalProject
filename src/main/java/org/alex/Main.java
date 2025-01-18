@@ -21,8 +21,7 @@ public class Main {
 
         while (running) {
             System.out.println("Хотите зарегистрироваться (1) или войти (2)?");
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+            int choice = getIntInput(scanner);
 
             switch (choice) {
                 case 1:
@@ -46,8 +45,7 @@ public class Main {
                         boolean walletRunning = true;
                         while (walletRunning) {
                             System.out.println("Выберите действие: 1 Добавить категорию 2 Добавить доход 3 Добавить расход 4 Просмотреть баланс 5 Выйти 6 Перевод средств");
-                            int action = scanner.nextInt();
-                            scanner.nextLine();
+                            int action = getIntInput(scanner);
 
                             switch (action) {
                                 case 1:
@@ -58,8 +56,7 @@ public class Main {
                                     Double limit = null;
                                     if (Category.Kind.valueOf(kind) == Category.Kind.Output) {
                                         System.out.println("Введите лимит категории:");
-                                        limit = scanner.nextDouble();
-                                        scanner.nextLine();
+                                        limit = getDoubleInput(scanner);
                                     }
                                     wallet.createCategory(categoryName, Category.Kind.valueOf(kind), limit);
                                     System.out.println("Категория добавлена.");
@@ -68,8 +65,7 @@ public class Main {
                                     System.out.println("Введите категорию:");
                                     String incomeCategory = scanner.nextLine();
                                     System.out.println("Введите сумму:");
-                                    double incomeAmount = scanner.nextDouble();
-                                    scanner.nextLine();
+                                    double incomeAmount = getDoubleInput(scanner);
                                     Wallet.Result resultIncome = wallet.operation(wallet, incomeCategory, new Amount(incomeAmount, Amount.Currency.RUB));
                                     if (resultIncome.reason() == Wallet.Reason.OK) {
                                         System.out.println("Доход добавлен.");
@@ -81,8 +77,7 @@ public class Main {
                                     System.out.println("Введите категорию:");
                                     String expenseCategory = scanner.nextLine();
                                     System.out.println("Введите сумму:");
-                                    double expenseAmount = scanner.nextDouble();
-                                    scanner.nextLine();
+                                    double expenseAmount = getDoubleInput(scanner);
                                     Wallet.Result resultExpense = wallet.operation(wallet, expenseCategory, new Amount(-expenseAmount, Amount.Currency.RUB));
                                     if (resultExpense.reason() == Wallet.Reason.OK) {
                                         System.out.println("Расход добавлен.");
@@ -107,8 +102,7 @@ public class Main {
                                     System.out.println("Введите категорию перевода:");
                                     String transferCategory = scanner.nextLine();
                                     System.out.println("Введите сумму:");
-                                    double transferAmount = scanner.nextDouble();
-                                    scanner.nextLine();
+                                    double transferAmount = getDoubleInput(scanner);
                                     Optional<User> recipient = userService.getUserByLogin(recipientLogin);
                                     if (recipient.isPresent()) {
                                         Wallet.Result resultTransfer = wallet.transferFunds(recipient.get(), transferCategory, new Amount(transferAmount, Amount.Currency.RUB));
@@ -136,5 +130,31 @@ public class Main {
             }
         }
         scanner.close();
+    }
+
+    private static int getIntInput(Scanner scanner) {
+        while (true) {
+            try {
+                int input = scanner.nextInt();
+                scanner.nextLine();
+                return input;
+            } catch (java.util.InputMismatchException e) {
+                System.out.println("Неверное действие. Пожалуйста, введите число.");
+                scanner.nextLine();
+            }
+        }
+    }
+
+    private static double getDoubleInput(Scanner scanner) {
+        while (true) {
+            try {
+                double input = scanner.nextDouble();
+                scanner.nextLine();
+                return input;
+            } catch (java.util.InputMismatchException e) {
+                System.out.println("Неверное действие. Пожалуйста, введите число.");
+                scanner.nextLine();
+            }
+        }
     }
 }
