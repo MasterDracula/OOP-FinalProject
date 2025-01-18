@@ -11,22 +11,28 @@ public class UserService {
     public UserService(Storage<String, User> userStorage) {
         this.userStorage = userStorage;
     }
-    public  void register(String login, String password){
-        if(userStorage.get(login).isPresent()){
-            System.err.println("This user already exist");
+
+    public void register(String login, String password) {
+        if (userStorage.get(login).isPresent()) {
+            System.err.println("Этот пользователь уже существует.");
             return;
         }
-        userStorage.add(new User(login, password), true); // как бы говорим, что бы он данные пользователя сразу сохранил в файл
-        System.out.println("User added");
+        userStorage.add(new User(login, password), true);
+        System.out.println("Пользователь добавлен");
     }
-    public Optional<User> login(String login, String password){
+
+    public Optional<User> login(String login, String password) {
         Optional<User> user = userStorage.get(login);
-        if (user.isPresent()&&user.get().password().equals(password)){
-            System.out.println("Welcome");
+        if (user.isPresent() && user.get().password().equals(password)) {
+            System.out.println("Добро пожаловать");
             return user;
-        }else {
-            System.err.println("Wrong password or login");
+        } else {
+            System.err.println("Неверный логин или пароль");
             return Optional.empty();
         }
+    }
+
+    public Optional<User> getUserByLogin(String login) {
+        return userStorage.get(login);
     }
 }

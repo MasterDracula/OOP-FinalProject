@@ -1,6 +1,5 @@
 package org.alex.model;
 
-
 import java.util.Date;
 
 public record Category(String name, Kind kind, double limit) implements Id<String>, Comparable<Category>{

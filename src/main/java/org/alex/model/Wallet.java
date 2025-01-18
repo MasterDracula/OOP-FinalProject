@@ -8,14 +8,16 @@ import java.util.Optional;
 
 public interface Wallet {
     double balance();
-
     void reload();
-
     Result operation(Wallet wallet, String category, Amount amount);
 
     default Result operation(String category, Amount amount) {
         return operation(this, category, amount);
     }
+
+    void createCategory(String name, Category.Kind kind, Double limit);
+    void printSummary();
+    Result transferFunds(User recipient, String category, Amount amount);
 
     record Result(Reason reason, String message) {
         public static Result success() {
@@ -25,17 +27,29 @@ public interface Wallet {
         public static Result over(String message) {
             return new Result(Reason.OVER, message);
         }
+
+        public static Result budgetExceeded(String message) {
+            return new Result(Reason.BUDGET_EXCEEDED, message);
+        }
+
+        public static Result expensesExceedIncome(String message) {
+            return new Result(Reason.EXPENSES_EXCEED_INCOME, message);
+        }
+
+        public static Result notFound(String message) {
+            return new Result(Reason.NOT_FOUND, message);
+        }
     }
 
     enum Reason {
-        OVER, OK, NOT_FOUND
+        OVER, OK, NOT_FOUND, BUDGET_EXCEEDED, EXPENSES_EXCEED_INCOME
     }
 
     final class DefaultWallet implements Wallet {
         private final User user;
         private final Map<Category, Double> balances = new HashMap<>();
         private final Storage<String, Category> categories;
-        private final Map<Category, Storage<Long, Category.Value>> values;
+        private final Map<Category, Storage<Long, Category.Value>> values = new HashMap<>();
         private final Factory factory;
         private double balance;
 
@@ -43,7 +57,6 @@ public interface Wallet {
             this.factory = factory;
             this.user = user;
             this.categories = factory.getCategoryStorage(user);
-            this.values = new HashMap<>();
             reload();
         }
 
@@ -66,8 +79,8 @@ public interface Wallet {
             categories.reload();
             categories.values().forEach(category -> {
                 this.values.put(category, factory.getCategoryValueStorage(user, category));
-                calculateBalance();
             });
+            calculateBalance();
         }
 
         @Override
@@ -76,29 +89,109 @@ public interface Wallet {
 
             Optional<Category> category = categories.get(categoryName);
             if (category.isEmpty()) {
-                return new Result(Reason.NOT_FOUND, String.format("Категория %s не наедена", categoryName));
+                return new Result(Reason.NOT_FOUND, String.format("Категория %s не найдена", categoryName));
             }
 
-            if (category.get().kind() == Category.Kind.Output) {
-                if (v >= 0.) {
-                    v *= -1;
-                }
+            if (category.get().kind() == Category.Kind.Output && v > 0) {
+                v *= -1;
             }
 
             Category targetCategory = category.get();
-            //wallet logic
             Double balance = balances.get(targetCategory);
             if (balance == null) {
-                return new Result(Reason.NOT_FOUND, String.format("Баланс по категории %s, не посчитан", categoryName));
+                balance = 0.0;
             }
-            if (v < 0 && balance - v < targetCategory.limit()) {
-                return new Result(Reason.OVER, String.format("Баланс по категории %s, не достаточен", categoryName));
+
+            if (v < 0 && balance + v < -targetCategory.limit()) {
+                return new Result(Reason.OVER, String.format("Бюджет по категории %s недостаточен", categoryName));
             }
+
             Storage<Long, Category.Value> valueStorage = values.get(targetCategory);
             valueStorage.add(Category.Value.of(v), true);
-            this.balance += v;
             balances.put(targetCategory, balance + v);
+            calculateBalance();
+
+            if (v < 0 && balance + v < -targetCategory.limit()) {
+                return Result.budgetExceeded(String.format("Лимит бюджета по категории %s превышен", categoryName));
+            }
+
+            if (getTotalExpense() > getTotalIncome()) {
+                return Result.expensesExceedIncome("Расходы превышают доходы!");
+            }
+
             return Result.success();
+        }
+
+        @Override
+        public void createCategory(String name, Category.Kind kind, Double limit) {
+            if (categories.get(name).isPresent()) {
+                System.out.println("Категория с таким названием уже существует.");
+                return;
+            }
+
+            if (kind == Category.Kind.Input) {
+                limit = 0.0; // на доход лимит не нужен
+            }
+
+            Category category = new Category(name, kind, limit);
+            categories.add(category, true);
+            values.put(category, factory.getCategoryValueStorage(user, category));
+            calculateBalance();
+        }
+
+        @Override
+        public void printSummary() {
+            System.out.println("Общий доход: " + getTotalIncome());
+            System.out.println("Общие расходы: " + getTotalExpense());
+            System.out.println("Доходы по категориям:");
+            balances.forEach((category, amount) -> {
+                if (category.kind() == Category.Kind.Input) {
+                    System.out.println(category.name() + ": " + amount);
+                }
+            });
+            System.out.println("Расходы по категориям и остаток бюджета:");
+            balances.forEach((category, amount) -> {
+                if (category.kind() == Category.Kind.Output) {
+                    double remainingBudget = category.limit() + amount;
+                    System.out.println(category.name() + ": " + amount + ", Оставшийся бюджет: " + remainingBudget);
+                }
+            });
+        }
+
+        public double getTotalIncome() {
+            return balances.entrySet().stream()
+                    .filter(entry -> entry.getKey().kind() == Category.Kind.Input)
+                    .mapToDouble(Map.Entry::getValue)
+                    .sum();
+        }
+
+        public double getTotalExpense() {
+            return balances.entrySet().stream()
+                    .filter(entry -> entry.getKey().kind() == Category.Kind.Output)
+                    .mapToDouble(Map.Entry::getValue)
+                    .sum();
+        }
+
+        @Override
+        public Result transferFunds(User recipient, String category, Amount amount) {
+            Wallet recipientWallet = new DefaultWallet(recipient, factory);
+
+            Result resultExpense = operation(this, category, new Amount(-amount.value(), amount.currency()));
+            if (resultExpense.reason() != Reason.OK) {
+                return resultExpense;
+            }
+
+            Result resultIncome = recipientWallet.operation(recipientWallet, category, amount);
+            if (resultIncome.reason() != Reason.OK) {
+                operation(this, category, amount);
+                return resultIncome;
+            }
+
+            return Result.success();
+        }
+
+        public Map<Category, Double> getBalances() {
+            return balances;
         }
     }
 }
